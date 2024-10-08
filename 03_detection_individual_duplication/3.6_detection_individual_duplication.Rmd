@@ -1,0 +1,102 @@
+---
+title: "Detection of duplication"
+author: "Yoshio"
+date: "2018.5.7"
+output:
+  html_document
+---
+
+```{r}
+library(qtl)
+library(ASMap)
+
+```
+
+Before linkage grouping, we filtered pair(s) of plants that share very similar segregation pattern because these pair(s) might have been produced by mistake in sampling.
+
+In this step we found out seemingly duplicated individuals and filtered them out.
+
+
+```{r read.table, cache=TRUE, cache.extra=tools::md5sum("3.5_blastresult_filtered_cs_res.csv")}
+#read genotype table
+
+cs <- read.cross("csv", file="3.5_blastresult_filtered_cs_res.csv", estimate.map=FALSE,skip=1)
+summary(cs)
+t4b <- read.cross("csv", file="3.5_blastresult_filtered_t4b_res.csv",estimate.map = FALSE,skip=1)
+summary(t4b)
+```
+
+Then we plot status of populations.
+
+```{r plot.hist, cache=TRUE, dependson="read.table"}
+#plot histogram of parcentage of matching genotypes within each population
+cg.cs <- comparegeno(cs)
+hist(cg.cs[lower.tri(cg.cs)],breaks=seq(0,1,len=101),xlab="Parcentage of matching genotypes in CS x spelta",main="Histogram of matching genotypes")
+rug(cg.cs[lower.tri(cg.cs)])
+
+cg.t4b <- comparegeno(t4b)
+hist(cg.t4b[lower.tri(cg.t4b)],breaks=seq(0,1,len=101),xlab="Parcentage of matching genotypes in DT4B x spelta",main="Histogram of matching genotypes")
+rug(cg.t4b[lower.tri(cg.t4b)])
+```
+
+As shown above, each populaion included one pair seeming to be duplicated.
+
+Then we filtered both of the pair within each population, respectively.
+
+```{r filter.dup, cache=TRUE, dependson="read.table"}
+#store pairs of similar genotypes
+wh.cs <- which(cg.cs > 0.8, arr=TRUE) #return the ordinal number that is TURE
+wh.cs <- wh.cs[wh.cs[,1] < wh.cs[,2],]
+wh.cs
+
+wh.t4b <- which(cg.t4b > 0.8, arr=TRUE) 
+wh.t4b <- wh.t4b[wh.t4b[,1] < wh.t4b[,2],]
+wh.t4b
+
+#confirm the contents of matching genotype
+g.cs <- pull.geno(cs)
+table(g.cs[33,], g.cs[74,])
+
+g.t4b <- pull.geno(t4b)
+table(g.t4b[89,],g.t4b[99,])
+
+#filtered the pair
+cs <- subset(cs, ind=-unlist(wh.cs))
+t4b <- subset(t4b, ind=-unlist(wh.t4b))
+```
+
+As the individuals have been cleaned, we comfirm the results.
+
+```{r plot.hist2,cache=TRUE, dependson="read.table"}
+summary(cs)
+cg.cs <- comparegeno(cs)
+hist(cg.cs[lower.tri(cg.cs)],breaks=seq(0,1,len=101),xlab="Parcentage of matching genotypes in CS x spelta",main="Histogram of matching genotypes")
+rug(cg.cs[lower.tri(cg.cs)])
+
+summary(t4b)
+cg.t4b <- comparegeno(t4b)
+hist(cg.t4b[lower.tri(cg.t4b)],breaks=seq(0,1,len=101),xlab="Parcentage of matching genotypes in DT4B x spelta",main="Histogram of matching genotypes")
+rug(cg.t4b[lower.tri(cg.t4b)])
+```
+
+Next, we make output of the resulted genotype matrices to proceed to linkage grouping.
+
+```{r reload,cache=TRUE, dependson="read.table"}
+write.cross(cs,format="csv",filestem = "3.7_CS.x.spelta_result")
+cs.df <- read.csv(file="3.7_CS.x.spelta_result.csv",header=FALSE,stringsAsFactors = FALSE)
+cs.df[cs.df=="AA"]<-"A"
+cs.df[cs.df=="AB"]<-"H"
+cs.df[cs.df=="BB"]<-"B"
+write.csv(cs.df,file="3.7_CS.x.spelta_result_res.csv",col.names = FALSE,row.names = FALSE,quote=FALSE)
+
+write.cross(t4b,format="csv",filestem = "3.7_DT4B-4Ssh.x.spelta_result")
+t4b.df <- read.csv(file="3.7_DT4B-4Ssh.x.spelta_result.csv",header=FALSE,stringsAsFactors = FALSE)
+t4b.df[t4b.df=="AA"]<-"A"
+t4b.df[t4b.df=="AB"]<-"H"
+t4b.df[t4b.df=="BB"]<-"B"
+write.csv(t4b.df,file="3.7_DT4B-4Ssh.x.spelta_result_res.csv",col.names = FALSE,row.names = FALSE,quote=FALSE)
+```
+The resulted genotype matrices are follows: 
+
+* CS x spleta: "3.7_CS.x.spelta_result_res.csv" :1307 markers, 165 plants
+* DT4B-4Ssh x spelta: "3.7_DT4B-4Ssh.x.spelta_result_res.csv" :1307 markers, 155 plants
