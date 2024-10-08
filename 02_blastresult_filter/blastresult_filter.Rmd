@@ -1,0 +1,113 @@
+---
+title: "blastresult_filter"
+author: "Yoshio"
+date: "2018”N4ŒŽ25“ú"
+output: html_document
+---
+
+```{r}
+set.seed(0419)
+library(qtl)
+library(ASMap)
+library(xoi)
+library(ggplot2)
+library(reshape2)
+library(tidyverse)
+library(data.table)
+```
+
+
+Now we have got the following three files;
+
+1. "3.4.2_duplicated pair_markers_filtered.xlsx":starting marker and genotype information
+2. "MarTopHit.csv":the resulted markers that passed through the criteria 1-3.
+3. "ToDropMar.csv":the resulted markers that passed through the criteria 1-3 but dropped in the criteria 4.
+
+We merge 1 and 2, excluding markers of 3.
+
+```{r filter,cache=TRUE,cache.extra=tools::md5sum("3.4.2_duplicated  pair_markers_filtered_cs.csv")}
+geno.cs <- read.csv(
+  file="3.4.2_duplicated pair_markers_filtered_cs.csv",header=TRUE) %>% 
+  dplyr::filter(!duplicated(Mar))
+
+geno.t4b <- read.csv(
+  file="3.4.2_duplicated pair_markers_filtered_t4b.csv",header=TRUE) %>% 
+  dplyr::filter(!duplicated(Mar))
+
+
+mth <- read.csv(file="MarTopHit.csv",header = TRUE) %>% 
+  dplyr::arrange(s.start) %>% 
+  dplyr::arrange(subjectid) %>% 
+  dplyr::filter(!duplicated(Mar))
+
+tdm <- read.csv(file="ToDropMar.csv",header = TRUE) %>% 
+  dplyr::filter(!duplicated(Mar))
+
+geno.cs.f <- dplyr::left_join(mth,geno.cs,by="Mar") %>% 
+  dplyr::anti_join(tdm,by="Mar")
+
+geno.t4b.f <- dplyr::left_join(mth,geno.t4b,by="Mar") %>% 
+  dplyr::anti_join(tdm,by="Mar")
+```
+
+Subsequently, we removed markers of low SNP call-rate (Markers with SNP call rate < 95%) which are seemingly less accurate.
+
+
+```{r filter.CallRate, cache=TRUE, dependson="filter"}
+geno.cs.f <- dplyr::filter(geno.cs.f,CallRate>0.95)
+geno.t4b.f <- dplyr::filter(geno.t4b.f,CallRate>0.95)
+```
+
+
+```{r write, cache=TRUE, dependson="filter"}
+geno.cs.f <- geno.cs.f %>% dplyr::group_by(subjectid) %>% 
+  dplyr::mutate(CHR=str_sub(subjectid,start=4,end=5)) %>% 
+  dplyr::mutate(MarID=paste(CHR,1:n()))
+write.csv(
+  geno.cs.f,file = "3.5_blastresult_filtered_cs.csv",append=FALSE,quote=FALSE,sep="\t")
+saveRDS(geno.cs.f,"geno.cs.f.obj")
+
+geno.t4b.f <- geno.t4b.f %>% dplyr::group_by(subjectid) %>% 
+  dplyr::mutate(CHR=str_sub(subjectid,start=4,end=5)) %>% 
+  dplyr::mutate(MarID=paste(CHR,1:n()))
+write.csv(
+  geno.t4b.f,file = "3.5_blastresult_filtered_t4b.csv",append=FALSE,quote=FALSE,sep="\t")
+saveRDS(geno.t4b.f,"geno.t4b.f.obj")
+```
+
+####Reshape datatable to hundle in R/qtl
+
+Next, we try to form linkage groups, i.e., drop off unlinked markers depending on thier genotypes of CS cross.
+
+```{r reshape.genotable, cache=TRUE, dependson="write"}
+
+geno.cs.f.rs <- geno.cs.f
+geno.cs.f.rs[,c(1:42,208:228)] = NULL
+geno.cs.f.rs <- geno.cs.f.rs[,c(ncol(geno.cs.f.rs),(ncol(geno.cs.f.rs)-1),1:(ncol(geno.cs.f.rs)-2))]
+geno.cs.f.rs <- as.data.frame(t(geno.cs.f.rs))
+geno.cs.f.rs[2:(ncol(geno.cs.f.rs)+1)] <- geno.cs.f.rs[1:ncol(geno.cs.f.rs)]
+geno.cs.f.rs[,1] <- rownames(geno.cs.f.rs)
+geno.cs.f.rs <- dplyr::mutate(geno.cs.f.rs,V1=str_replace(V1,"F2.population.CS.x81.Splt.x81.plant..",replacement = ""))
+geno.cs.f.rs[1,1] = "MarID"
+geno.cs.f.rs[2,1] = ""
+
+write.csv(geno.cs.f.rs,file="3.5_blastresult_filtered_cs_res.csv",row.names = FALSE, append=FALSE,quote=FALSE,sep="\t")
+
+
+geno.t4b.f.rs <- geno.t4b.f
+geno.t4b.f.rs[,c(1:42,200:220)] = NULL
+geno.t4b.f.rs <- geno.t4b.f.rs[,c(ncol(geno.t4b.f.rs),(ncol(geno.t4b.f.rs)-1),1:(ncol(geno.t4b.f.rs)-2))]
+geno.t4b.f.rs <- as.data.frame(t(geno.t4b.f.rs))
+geno.t4b.f.rs[2:(ncol(geno.t4b.f.rs)+1)] <- geno.t4b.f.rs[1:ncol(geno.t4b.f.rs)]
+geno.t4b.f.rs[,1] <- rownames(geno.t4b.f.rs)
+geno.t4b.f.rs <- dplyr::mutate(geno.t4b.f.rs,V1=str_replace(V1,"F2.population.T4B.4Ssh.x81.Splt.x81.plant..",replacement = ""))
+geno.t4b.f.rs[1,1] = "MarID"
+geno.t4b.f.rs[2,1] = ""
+
+write.csv(geno.t4b.f.rs,file="3.5_blastresult_filtered_t4b_res.csv",row.names = FALSE, append=FALSE,quote=FALSE,sep="\t")
+```
+
+Finally we have got genotype tables so as to hundle with R/qtl.
+
+* "3.5_blastresult_filtered_cs_res.csv"
+* "3.5_blastresult_filtered_t4b_res.csv"
