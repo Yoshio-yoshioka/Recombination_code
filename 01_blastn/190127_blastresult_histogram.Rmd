@@ -1,0 +1,76 @@
+---
+title: "Blast result heatmap and histogram"
+author: "Yoshio"
+date: "2019/1/27"
+output: html_document
+---
+
+```{r setup}
+library(readr)
+library(pipeR)
+library(tidyverse)
+library(tidyr)
+library(stringr)
+```
+
+2955 queries of DArT markers' trimmed allele sequences were BLASTed against CS ref seq v1.0 using default settings.
+The raw result was formated by Blastgrapper according to average query length which hits to each chromosome.
+
+We draw a heatmap whose color showing the **hit identity** of each marker's allele sequence that matched the reference sequence of the respective chromosome.
+
+```{r prepare.heatmap, cache=TRUE, cache.e=tools::md5sum("190219iwgsc_1.0_PM-cs.without.dup_ind.drop_trimmed-seq_avg_identity_percent_per_chr.csv")}
+#preparation
+blastgp.id <- read_csv(file="190219iwgsc_1.0_PM-cs.without.dup_ind.drop_trimmed-seq_avg_identity_percent_per_chr.csv") %>>%
+  dplyr::select(-(24:25)) %>>%
+  dplyr::mutate(queries = seq(1:nrow(.)))
+blastgp.id <- tidyr::gather(blastgp.id, key=chr, value=identity, 2:23) %>>%
+  dplyr::mutate(identity=str_replace(identity, pattern="-",replacement = "0"))
+blastgp.id$identity <- as.numeric(blastgp.id$identity)
+```
+the Heatmap was drawn with "ggplot2" package.
+
+```{r draw.heatmap, cache=TRUE, dependson="prepare.heatmap"}
+#draw heatmap
+ghm <- ggplot(blastgp.id, aes(x=chr, y = queries, fill = identity))
+ghm <- ghm + geom_tile()
+ghm <- ghm + theme_bw()
+ghm <- ghm + theme(plot.background = element_blank(),
+                   panel.grid.minor = element_blank(),
+                   panel.grid.major = element_blank(),
+                   panel.background = element_blank(),
+                   axis.line = element_blank(),
+                   axis.ticks = element_blank(),
+                   strip.background = element_rect(fill = "white", colour = "white"),
+                   axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+ghm <- ghm + xlab("Chromosome") + ylab("Marker")
+plot(ghm)
+```
+
+Lighter-colored rectangles represent markers that hit to the chromosome with high identity.
+
+Focusing on the rows, most markers hit to only one chromosome with high idenity, that homoeologous sequences could be distinguished, though there are some markers that hit to homoeologous chromosomes with equivalent identity.
+
+
+
+
+```{r plot.blast.hist, cache.e=tools::md5sum("190219iwgsc_1.0_PM-cs.without.dup_ind.drop_trimmed-seq_avg_identity_percent_per_chr.csv")}
+#preparation
+histn <- blastgp.id %>>%
+  dplyr::filter(identity > 0) %>>%
+  dplyr::count(queries, chr) %>>%
+  dplyr::count(queries)
+
+histn.g <- histn %>>%
+  ggplot(aes(x=n))+
+  geom_histogram(binwidth = 1)+
+  xlab("Number of the chromosome to which one DArT marker hit")+
+  ylab("Marker number")+
+  theme_bw()+
+  theme(
+    axis.text = element_text(size = 12),
+    axis.title =element_text(size = 13) 
+  )
+
+plot(histn.g)
+table(histn$n)
+```
